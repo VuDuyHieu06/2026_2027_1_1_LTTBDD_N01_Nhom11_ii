@@ -5,6 +5,7 @@ import '../l10n/app_strings.dart';
 import '../models/ingredient.dart';
 import '../models/recipe.dart';
 import '../state/app_state_controller.dart';
+import '../services/mysql_service.dart';
 
 class RecipeFormScreen extends StatefulWidget {
   final AppStateController state;
@@ -114,30 +115,42 @@ class _RecipeFormScreenState extends State<RecipeFormScreen> {
   }
 
   Future<void> _pickImageFromDevice() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 75,
-      );
-      if (pickedFile != null) {
-        final bytes = await pickedFile.readAsBytes();
-        final base64String =
-            'data:image/jpeg;base64,${base64Encode(bytes)}';
-        setState(() {
-          _pickedImageBase64 = base64String;
-          _pickedFileName = pickedFile.name;
-          _imageUrlCtrl.clear();
-        });
-      }
-    } catch (e) {
+  final lang = widget.state.languageCode;
+  try {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 75,
+    );
+    if (pickedFile == null) return;
+
+    // Kiểm tra định dạng: chỉ chấp nhận tệp .jpg (BR04)
+    if (!MySqlService.isValidJpgImage(pickedFile.name)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể mở thư mục ảnh: $e')),
+        SnackBar(
+          content: Text(AppStrings.tr('form_image_jpg_error', lang)),
+        ),
       );
+      return;
     }
+
+    final bytes = await pickedFile.readAsBytes();
+    final base64String =
+        'data:image/jpeg;base64,${base64Encode(bytes)}';
+    setState(() {
+      _pickedImageBase64 = base64String;
+      _pickedFileName = pickedFile.name;
+      _imageUrlCtrl.clear();
+    });
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Không thể mở thư mục ảnh: $e')),
+    );
   }
+}
 
   Widget _buildImagePreview() {
     if (_pickedImageBase64 != null &&
@@ -170,8 +183,30 @@ class _RecipeFormScreenState extends State<RecipeFormScreen> {
     );
   }
 
+  String? _validateImageUrl(String? value, {required String lang}) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+
+    final normalized = v.split('?').first.trim();
+    if (!MySqlService.isValidJpgImage(normalized)) {
+      return AppStrings.tr('form_image_jpg_error', lang);
+    }
+    return null;
+  }
+
   void _saveForm() {
     final lang = widget.state.languageCode;
+    final urlText = _imageUrlCtrl.text.trim();
+    if (urlText.isNotEmpty &&
+        !MySqlService.isValidJpgImage(urlText.split('?').first.trim())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.tr('form_image_jpg_error', lang)),
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     final ingViLines = _ingredientsViCtrl.text
@@ -303,9 +338,13 @@ class _RecipeFormScreenState extends State<RecipeFormScreen> {
                 labelText: AppStrings.tr('form_title_vi', lang),
                 border: const OutlineInputBorder(),
               ),
-              validator: (val) => (val == null || val.trim().isEmpty)
-                  ? AppStrings.tr('form_error', lang)
-                  : null,
+              validator: (val) {
+                final v = (val ?? '').trim();
+                if (v.isEmpty) {
+                  return AppStrings.tr('form_error', lang);
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -340,7 +379,7 @@ class _RecipeFormScreenState extends State<RecipeFormScreen> {
                       children: [
                         const Expanded(
                           child: Text(
-                            'Hình ảnh món ăn (Dán URL bất kỳ hoặc Chọn ảnh trong máy)',
+                            'Hình ảnh món ăn (chỉ chấp nhận URL/ảnh .jpg)',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -368,10 +407,11 @@ class _RecipeFormScreenState extends State<RecipeFormScreen> {
                           }
                         });
                       },
+                      validator: (val) => _validateImageUrl(val, lang: lang),
                       decoration: const InputDecoration(
-                        labelText: 'Đường dẫn URL ảnh (https://...)',
+                        labelText: 'Đường dẫn URL ảnh (.jpg)',
                         hintText:
-                            'Dán link ảnh bất kỳ (https://...) vào đây',
+                            'Dán link ảnh .jpg (https://...) vào đây',
                         prefixIcon: Icon(Icons.link),
                         border: OutlineInputBorder(),
                       ),
