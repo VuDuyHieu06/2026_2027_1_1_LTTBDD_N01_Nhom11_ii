@@ -180,3 +180,7 @@ Dự án phục vụ mục đích học tập. Mọi quyền được bảo lưu
 ## 📄 Giấy phép
 
 Dự án phục vụ mục đích học tập. Mọi quyền được bảo lưu bởi nhóm phát triển.
+
+## Minh chứng vẽ biểu đồ
+
+https://drive.google.com/file/d/1BOrsA97GvmjJ0LECxTabxxU36TdHPOCi/view?usp=sharing
